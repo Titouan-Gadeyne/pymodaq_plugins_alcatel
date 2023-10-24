@@ -3,7 +3,7 @@
 SHORT_PLUGIN_NAME = 'alcatel'
 
 package-url = 'https://github.com/Titouan-Gadeyne/pymodaq_plugins_alcatel'
-description = 'some word about your plugin'
+description = 'PyMoDAQ plugin for the Alcatel ACM1000 6-port gauge controller.'
 
 author = 'Titouan GADEYNE'
 author-email = 'titouan.gadeyne@cea.fr'
@@ -11,4 +11,4 @@ license = 'MIT'
 
 [plugin-install]
 #packages required for your plugin:
-packages-required = ['pymodaq>=4.0.0']
+packages-required = ['pymodaq>=4.0.0', 'pylablib']
