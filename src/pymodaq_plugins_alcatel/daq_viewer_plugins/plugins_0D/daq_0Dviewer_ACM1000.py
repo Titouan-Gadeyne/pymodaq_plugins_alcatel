@@ -79,11 +79,11 @@ class DAQ_0DViewer_ACM1000(DAQ_Viewer_base):
 
         self.ini_detector_init(old_controller=controller,
                                new_controller=ACM1000(self.settings['selected_port']))
-        
+    
+        initialized = self.controller.test_connection()
+
         self.controller.enable_sensors()
         self.init_display()
-
-        initialized = self.controller.test_connection()
 
         info = 'Initialization...'
         return info, initialized
@@ -116,6 +116,7 @@ class DAQ_0DViewer_ACM1000(DAQ_Viewer_base):
         """
 
         data_tot = []
+        update = []
         for channel in [1,2,3,4,5,6]:
             status = self.controller.get_channel_status(channel)
             pressure = self.controller.get_pressure(channel)
@@ -123,9 +124,10 @@ class DAQ_0DViewer_ACM1000(DAQ_Viewer_base):
                 to_display = self.controller.from_Pa(pressure, units="mbar")
             else:   
                 to_display = 0.0
-            data_tot.append(DataFromPlugins(name='Channel '+str(channel), data=[np.array([to_display])],
-                                                            dim='Data0D', labels=['Channel '+str(channel)+' - Status = '+str(status)]))
-
+            if status == 'sensor_off':
+                self.controller.enable_sensors()
+            data_tot.append(DataFromPlugins(name='Channel '+str(channel)+' - Status = '+status, data=[np.array([to_display])],
+                                                            dim='Data0D', labels=['Channel '+str(channel)]))
         self.dte_signal.emit(DataToExport(name='ACM1000_to_display',
                                         data=data_tot))
 
