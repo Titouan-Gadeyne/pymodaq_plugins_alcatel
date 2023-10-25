@@ -116,7 +116,6 @@ class DAQ_0DViewer_ACM1000(DAQ_Viewer_base):
         """
 
         data_tot = []
-        update = []
         for channel in [1,2,3,4,5,6]:
             status = self.controller.get_channel_status(channel)
             pressure = self.controller.get_pressure(channel)
