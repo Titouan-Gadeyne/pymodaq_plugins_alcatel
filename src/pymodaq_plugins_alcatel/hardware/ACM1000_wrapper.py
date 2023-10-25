@@ -18,8 +18,6 @@ class ACM1000(comm_backend.ICommBackendWrapper):
     Error=AlcatelError
 
     def __init__(self, conn):
-        if conn == 'test':
-            print('ok')
         instr=comm_backend.new_backend(conn,"serial",term_read="\r\n",term_write="",defaults={"serial":("COM1",9600)},reraise_error=AlcatelBackendError)
         comm_backend.ICommBackendWrapper.__init__(self,instr)
         gmux=([1,2,3,4,5,6],)

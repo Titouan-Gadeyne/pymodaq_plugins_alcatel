@@ -30,9 +30,7 @@ class DAQ_0DViewer_ACM1000(DAQ_Viewer_base):
 
     Attributes:
     -----------
-    controller: object
-        The particular object that allow the communication with the hardware, in general a python wrapper around the
-         hardware library.
+    controller: ACM1000 class, based on the pylablib Pfeiffer TPG260 wrapper.
     """
     ports = pylablib.list_backend_resources("serial")
     if ports:
