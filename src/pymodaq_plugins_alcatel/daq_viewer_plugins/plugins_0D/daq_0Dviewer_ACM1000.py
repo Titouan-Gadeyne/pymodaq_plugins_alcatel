@@ -5,11 +5,7 @@ from pymodaq.control_modules.viewer_utility_classes import DAQ_Viewer_base, como
 from pymodaq.utils.parameter import Parameter
 
 import pylablib as pylablib
-from pylablib.devices.Pfeiffer import TPG260
-
-
-class ACM1000(TPG260): # This class inherits from the Pfeiffer TPG260 class from pylablib
-    pass
+from pymodaq_plugins_alcatel.hardware.ACM1000_wrapper import ACM1000
 
 
 class DAQ_0DViewer_ACM1000(DAQ_Viewer_base):
@@ -42,8 +38,8 @@ class DAQ_0DViewer_ACM1000(DAQ_Viewer_base):
     if ports:
         default_port = ports[0]
     else:
-        default_port = 'None'
-
+        ports = 'No ports available'
+        default_port = 'No ports available'
 
     params = comon_parameters+[
         {'title': 'Available ports', 'name': 'available_ports', 'type': 'list', 'values': ports, 'readonly': True},
@@ -52,8 +48,8 @@ class DAQ_0DViewer_ACM1000(DAQ_Viewer_base):
 
     def ini_attributes(self):
 
-        self.controller: ACM1000(self.settings['selected_port']) # init controller by trying to connect to the port selected by default
-
+        self.controller: ACM1000 = None
+        self.hardware_averaging = False
 
     def commit_settings(self, param: Parameter):
         """Apply the consequences of a change of value in the detector settings
@@ -65,8 +61,8 @@ class DAQ_0DViewer_ACM1000(DAQ_Viewer_base):
         """
 
         if param.name() == 'selected_port': # if the selected COM port was changed, try to connect to it
-           self.controller = ACM1000(param.value())  
-
+           self.controller.close() 
+           self.ini_detector()
 
     def ini_detector(self, controller=None):
         """Detector communication initialization
@@ -79,73 +75,65 @@ class DAQ_0DViewer_ACM1000(DAQ_Viewer_base):
 
         Returns
         -------
-        info: str
         initialized: bool
             False if initialization failed otherwise True
         """
 
-        raise NotImplemented  # TODO when writing your own plugin remove this line and modify the one below
         self.ini_detector_init(old_controller=controller,
-                               new_controller=PythonWrapperOfYourInstrument())
+                               new_controller=ACM1000(self.settings['selected_port']))
+        
+        self.controller.enable_sensors()
+        self.init_display()
 
-        # TODO for your custom plugin (optional) initialize viewers panel with the future type of data
-        self.dte_signal_temp.emit(DataToExport(name='myplugin',
-                                               data=[DataFromPlugins(name='Mock1',
-                                                                    data=[np.array([0]), np.array([0])],
-                                                                    dim='Data0D',
-                                                                    labels=['Mock1', 'label2'])]))
+        initialized = self.controller.test_connection()
 
-        info = "Whatever info you want to log"
-        initialized = self.controller.a_method_or_atttribute_to_check_if_init()  # TODO
+        info = 'Initialization...'
         return info, initialized
+    
+    def init_display(self):
+        self.dte_signal_temp.emit(DataToExport(name='ACM1000_to_display',
+                                               data=[DataFromPlugins(name='Channel 1', data=[np.array([0.0])],
+                                                                    dim='Data0D', labels=['Channel 1']),
+                                                    DataFromPlugins(name='Channel 2', data=[np.array([0.0])],
+                                                                    dim='Data0D', labels=['Channel 2']),
+                                                    DataFromPlugins(name='Channel 3', data=[np.array([0.0])],
+                                                                    dim='Data0D', labels=['Channel 3']),
+                                                    DataFromPlugins(name='Channel 4', data=[np.array([0.0])],
+                                                                    dim='Data0D', labels=['Channel 4']),
+                                                    DataFromPlugins(name='Channel 5', data=[np.array([0.0])],
+                                                                    dim='Data0D', labels=['Channel 5']),
+                                                    DataFromPlugins(name='Channel 6', data=[np.array([0.0])],
+                                                                    dim='Data0D', labels=['Channel 6'])]))
 
     def close(self):
         """Terminate the communication protocol"""
-        ## TODO for your custom plugin
-        raise NotImplemented  # when writing your own plugin remove this line
-        #  self.controller.your_method_to_terminate_the_communication()  # when writing your own plugin replace this line
+        self.controller.close()
 
-    def grab_data(self, Naverage=1, **kwargs):
-        """Start a grab from the detector
+    def grab_data(self, Naverage=None, **kwargs):
+        """
+        Start a grab from the detector
 
         Parameters
         ----------
-        Naverage: int
-            Number of hardware averaging (if hardware averaging is possible, self.hardware_averaging should be set to
-            True in class preamble and you should code this implementation)
-        kwargs: dict
-            others optionals arguments
         """
-        ## TODO for your custom plugin: you should choose EITHER the synchrone or the asynchrone version following
 
-        # synchrone version (blocking function)
-        raise NotImplemented  # when writing your own plugin remove this line
-        data_tot = self.controller.your_method_to_start_a_grab_snap()
-        self.dte_signal.emit(DataToExport(name='myplugin',
-                                          data=[DataFromPlugins(name='Mock1', data=data_tot,
-                                                                dim='Data0D', labels=['dat0', 'data1'])]))
-        #########################################################
+        data_tot = []
+        for channel in [1,2,3,4,5,6]:
+            status = self.controller.get_channel_status(channel)
+            pressure = self.controller.get_pressure(channel)
+            if status in ['ok', 'under', 'over']:
+                to_display = self.controller.from_Pa(pressure, units="mbar")
+            else:   
+                to_display = 0.0
+            data_tot.append(DataFromPlugins(name='Channel '+str(channel), data=[np.array([to_display])],
+                                                            dim='Data0D', labels=['Channel '+str(channel)+' - Status = '+str(status)]))
 
-        # asynchrone version (non-blocking function with callback)
-        raise NotImplemented  # when writing your own plugin remove this line
-        self.controller.your_method_to_start_a_grab_snap(self.callback)  # when writing your own plugin replace this line
-        #########################################################
-
-
-    def callback(self):
-        """optional asynchrone method called when the detector has finished its acquisition of data"""
-        data_tot = self.controller.your_method_to_get_data_from_buffer()
-        self.dte_signal.emit(DataToExport(name='myplugin',
-                                          data=[DataFromPlugins(name='Mock1', data=data_tot,
-                                                                dim='Data0D', labels=['dat0', 'data1'])]))
+        self.dte_signal.emit(DataToExport(name='ACM1000_to_display',
+                                        data=data_tot))
 
     def stop(self):
         """Stop the current grab hardware wise if necessary"""
-        ## TODO for your custom plugin
-        raise NotImplemented  # when writing your own plugin remove this line
-        self.controller.your_method_to_stop_acquisition()  # when writing your own plugin replace this line
-        self.emit_status(ThreadCommand('Update_Status', ['Some info you want to log']))
-        ##############################
+        self.emit_status(ThreadCommand('Update_Status', ['Stopped grabbing']))
         return ''
 
 
