@@ -21,22 +21,12 @@ class ACM1000(comm_backend.ICommBackendWrapper):
         instr=comm_backend.new_backend(conn,"serial",term_read="\r\n",term_write="",defaults={"serial":("COM1",9600)},reraise_error=AlcatelBackendError)
         comm_backend.ICommBackendWrapper.__init__(self,instr)
         gmux=([1,2,3,4,5,6],)
-        smux=([1,2,3,4,5,6],1)
         self._add_status_variable("pressure",lambda channel: self.get_pressure(channel,status_error=False),ignore_error=(AlcatelError,),mux=gmux,priority=5)
         self._add_status_variable("channel_status",self.get_channel_status,mux=gmux,priority=5)
         self._add_status_variable("units",self.get_units)
         self._add_status_variable("enabled",self.is_enabled,priority=2)
-        #self._add_status_variable("switch_status",self.get_switch_status)
         self._add_info_variable("gauge_kind",self.get_gauge_kind,mux=gmux)
-        #self._add_settings_variable("display_channel",self.get_display_channel,self.set_display_channel)
-        self._add_settings_variable("measurement_filter",self.get_measurement_filter,self.set_measurement_filter,mux=smux)
-        self._add_settings_variable("calibration_factor",self.get_calibration_factor,self.set_calibration_factor,mux=smux,priority=-2)
-        #self._add_status_variable("switch_settings",self.get_switch_settings,mux=([1,2,3,4],),priority=-2)
-        #self._add_status_variable("gauge_control_settings",self.get_gauge_control_settings,mux=gmux,priority=-2)
-        try:
-            self.query("BAU")
-        except self.instr.Error:
-            self.close()
+        if self.test_connection() == False:
             raise
 
     def test_connection(self):
@@ -88,11 +78,6 @@ class ACM1000(comm_backend.ICommBackendWrapper):
     def get_units(self):
         """Get device units for indication/reading (``"mbar"``, ``"torr"``, or ``"pa"``)"""
         return self.query("UNI","int")
-
-    @interface.use_parameters(_returns="units")
-    def set_units(self, units):
-        """Set device units for indication/reading (``"mbar"``, ``"torr"``, or ``"pa"``)"""
-        return self.query("UNI, {}".format(units),"int")
     
     def to_Pa(self, value, units=None):
         """
@@ -114,8 +99,6 @@ class ACM1000(comm_backend.ICommBackendWrapper):
         conv_factor={"mbar":1E2,"torr":133.322,"pa":1}
         return value/conv_factor[units]
 
-    #_p_gauge_enabled=interface.EnumParameterClass("gauge_enabled",{None:0,False:1,True:2})
-    #@interface.use_parameters(_returns="gauge_enabled")
     def is_enabled(self, channel=1):
         """
         Check if the gauge at the given channel is enabled.
@@ -124,7 +107,6 @@ class ACM1000(comm_backend.ICommBackendWrapper):
         """
         return self.query("SEN",["int","int","int","int","int","int"])[channel-1]
 
-    #@interface.use_parameters(_returns="gauge_enabled")
     def enable(self, channel=1):
         """
         Turn ON the sensor at the given channel
@@ -135,7 +117,6 @@ class ACM1000(comm_backend.ICommBackendWrapper):
             vals[channel-1] = 2
             return self.query("SEN,{},{},{},{},{},{}".format(*vals),["int","int","int","int","int","int"])[channel-1]
         
-    #@interface.use_parameters(_returns="gauge_enabled")
     def disable(self, channel=1):
         """
         Turn OFF the sensor at the given channel
@@ -183,26 +164,6 @@ class ACM1000(comm_backend.ICommBackendWrapper):
     @interface.use_parameters
     def get_gauge_kind(self, channel=1):
         return self.query("TID",["str","str","str","str","str","str"])[channel-1]
-
-    def get_measurement_filter(self, channel=1):
-        """Get gauge measurement filter (``"fast"``, ``"medium"``, or ``"slow"``)"""
-        return self.query("FIL","int")[channel-1]
-
-    def set_measurement_filter(self, meas_filter, channel=1):
-        """Set gauge measurement filter (``"fast"``, ``"medium"``, or ``"slow"``)"""
-        curr_filter=self.query("FIL","int")
-        curr_filter[channel-1]=meas_filter
-        return self.query("FIL,{},{},{},{},{},{}".format(*curr_filter),"int")[channel-1]
-    
-    def get_calibration_factor(self, channel=1):
-        """Get gauge calibration factor"""
-        return self.query("CAL","float")[channel-1]
-    
-    def set_calibration_factor(self, coefficient, channel=1):
-        """Set gauge calibration factor"""
-        curr_coefficient=self.query("CAL","float")
-        curr_coefficient[channel-1]=coefficient
-        return self.query("CAL,{},{},{},{},{},{}".format(*curr_coefficient),"float")[channel-1]
     
     def _parse_errors(self, errs):
         if not isinstance(errs,list):
@@ -210,20 +171,3 @@ class ACM1000(comm_backend.ICommBackendWrapper):
         err_codes={0:"no_error",1:"watchdog",2:"task_fail",3:"eprom",4:"ram",5:"eeprom",6:"display",7:"adconv",
             9:"gauge_1_err",10:"gauge_1_id_err",11:"gauge_2_err",12:"gauge-2_id_err"}
         return [err_codes.get(er,er) for er in sorted(errs)]
-    
-    def get_current_errors(self):
-        """
-        Get a list of all present error messages.
-
-        If there are no errors, return a single-element list ``["no_error"]``.
-        """
-        return self._parse_errors(self.query("RES","int"))
-    
-    def reset_error(self):
-        """
-        Cancel currently active errors and return to measurement mode.
-
-        Return the list of currently present errors.
-        If there are no errors, return a single-element list ``["no_error"]``.
-        """
-        return self._parse_errors(self.query("RES,1","int"))

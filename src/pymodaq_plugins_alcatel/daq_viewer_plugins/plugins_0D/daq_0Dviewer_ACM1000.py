@@ -48,6 +48,7 @@ class DAQ_0DViewer_ACM1000(DAQ_Viewer_base):
 
         self.controller: ACM1000 = None
         self.hardware_averaging = False
+        self.gauges_kinds = ['','','','','','']
 
     def commit_settings(self, param: Parameter):
         """Apply the consequences of a change of value in the detector settings
@@ -67,28 +68,27 @@ class DAQ_0DViewer_ACM1000(DAQ_Viewer_base):
 
         Parameters
         ----------
-        controller: (object)
-            custom object of a PyMoDAQ plugin (Slave case). None if only one actuator/detector by controller
-            (Master case)
+        controller: ACM1000
 
         Returns
         -------
+        info
         initialized: bool
             False if initialization failed otherwise True
         """
 
         self.ini_detector_init(old_controller=controller,
                                new_controller=ACM1000(self.settings['selected_port']))
-    
         initialized = self.controller.test_connection()
-
-        self.controller.enable_sensors()
         self.init_display()
-
+        if initialized:
+            self.controller.enable_sensors()
+            self.update_gauge_names()
         info = 'Initialization...'
         return info, initialized
     
     def init_display(self):
+        """Initialize six 0D viewers"""
         self.dte_signal_temp.emit(DataToExport(name='ACM1000_to_display',
                                                data=[DataFromPlugins(name='Channel 1', data=[np.array([0.0])],
                                                                     dim='Data0D', labels=['Channel 1']),
@@ -102,6 +102,10 @@ class DAQ_0DViewer_ACM1000(DAQ_Viewer_base):
                                                                     dim='Data0D', labels=['Channel 5']),
                                                     DataFromPlugins(name='Channel 6', data=[np.array([0.0])],
                                                                     dim='Data0D', labels=['Channel 6'])]))
+        
+    def update_gauge_names(self):
+        """Get the name of the connected gauges from the controller"""
+        self.gauges_kinds = [self.controller.get_gauge_kind(channel) for channel in [1,2,3,4,5,6]]
 
     def close(self):
         """Terminate the communication protocol"""
@@ -111,22 +115,32 @@ class DAQ_0DViewer_ACM1000(DAQ_Viewer_base):
         """
         Start a grab from the detector
 
-        Parameters
         ----------
+
         """
 
         data_tot = []
         for channel in [1,2,3,4,5,6]:
+            if self.controller.get_channel_status(channel) == 'sensor_off': # if the sensor is off, turn it on and get its name
+                self.controller.enable_sensors()
+                self.update_gauge_names()
             status = self.controller.get_channel_status(channel)
-            pressure = self.controller.get_pressure(channel)
-            if status in ['ok', 'under', 'over']:
-                to_display = self.controller.from_Pa(pressure, units="mbar")
+
+            if status in ['ok', 'under', 'over']: # if the controller displays a pressure, display it (in mbar). Else display 0.0 mbar.
+                to_display = self.controller.from_Pa(self.controller.get_pressure(channel), units="mbar")
             else:   
                 to_display = 0.0
-            if status == 'sensor_off':
-                self.controller.enable_sensors()
-            data_tot.append(DataFromPlugins(name='Channel '+str(channel)+' - Status = '+status, data=[np.array([to_display])],
-                                                            dim='Data0D', labels=['Channel '+str(channel)]))
+
+            if status == 'no_sensor':
+                data_tot.append(DataFromPlugins(name='Channel '+str(channel)+' - no Sensor', 
+                                            data=[np.array([to_display])],
+                                            dim='Data0D', 
+                                            labels=['Channel '+str(channel)]))
+            else: # if there is a gauge connected, write its name and its status in the window name.
+                data_tot.append(DataFromPlugins(name='Channel '+str(channel)+' - '+self.gauges_kinds[channel-1]+' ('+status+')', 
+                                            data=[np.array([to_display])],
+                                            dim='Data0D', 
+                                            labels=['Channel '+str(channel)]))
         self.dte_signal.emit(DataToExport(name='ACM1000_to_display',
                                         data=data_tot))
 
