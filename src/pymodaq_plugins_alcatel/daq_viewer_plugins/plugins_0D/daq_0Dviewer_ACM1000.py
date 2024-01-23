@@ -34,7 +34,7 @@ class DAQ_0DViewer_ACM1000(DAQ_Viewer_base):
     """
     ports = pylablib.list_backend_resources("serial")
     if ports:
-        default_port = ports[0]
+        default_port = ports[-1]
     else:
         ports = 'No ports available'
         default_port = 'No ports available'
